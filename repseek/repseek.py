@@ -77,7 +77,7 @@ def remove_duplicates(hits: list[SeqRecord]) -> list[SeqRecord]:
     return nodups
 
 
-def run_blastn(
+def run_tblastn(
     tblastn_binary_path: str,
     parallel_binary_path: str,
     input_fasta: str,
@@ -111,22 +111,21 @@ def run_blastn(
         f"-evalue {evalue} -db {db} -max_target_seqs {max_target_seqs} -outfmt \\'{outfmt}\\' -query -"
     )
     logging.info(f"Launching subprocess: {cmd}")
-    process = subprocess.Popen(
-        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
+    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = process.communicate()
     retcode = process.wait()
     if retcode != 0:
         raise RuntimeError(
-            f"tblastn failed with return code {retcode}.\n"
-            f"stderr:\n{stderr.decode()}"
+            f"tblastn failed with return code {retcode}.\n" f"stderr:\n{stderr.decode()}"
         )
     with open(outfile, "w") as fh:
         fh.write(stdout.decode())
 
 
-def collect_plasmid(infile: str, outfile: Path) -> None:
-    """Collect plasmid accession ID from tblastn output file."""
+def collect_pident_plasmid(infile: str, outfile: Path, pident_threshold: float = 98.0) -> None:
+    """Collect plasmid accession ID from tblastn output file.
+    The pident value should be greater than or equal to 98.0 (default).
+    """
     df = pd.read_csv(infile, sep="\t", header=None)
     df.columns = [
         "qaccver",
@@ -136,8 +135,9 @@ def collect_plasmid(infile: str, outfile: Path) -> None:
         "evalue",
         "bitscore",
     ]
+    df_filtered = df[df["pident"] >= pident_threshold]
     with open(outfile, "w") as fh:
-        fh.write("\n".join(df["saccver"].unique()))
+        fh.write("\n".join(df_filtered["saccver"].unique()))
 
 
 def main(argv):
@@ -149,14 +149,14 @@ def main(argv):
     with open("foldseekhit_nodups.fasta", "w") as fh:
         SeqIO.write(remove_duplicates(foldseekhits), fh, "fasta")
 
-    run_blastn(
+    run_tblastn(
         tblastn_binary_path=FLAGS.tblastn_binary_path,
         parallel_binary_path=FLAGS.parallel_binary_path,
         db=FLAGS.db_path,
-        input_fasta="foldseekhits_nodup.fasta",
-        outfile=FLAGS.outfile_path,
+        input_fasta="foldseekhit_nodups.fasta",
+        outfile="intermediate.tsv",
     )
-    collect_plasmid(FLAGS.outfile_path, Path("test2_plasmid.txt"))
+    collect_pident_plasmid("intermediate.tsv", FLAGS.outfile_path, pident_threshold=98.0)
 
 
 if __name__ == "__main__":
