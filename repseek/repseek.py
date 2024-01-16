@@ -2,45 +2,15 @@
 # %%
 from pathlib import Path
 from absl import logging
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import pandas as pd
 import subprocess
 import shutil
-from absl import app
-from absl import flags
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
 logging.set_verbosity(logging.INFO)
-
-flags.DEFINE_string(
-    "parallel_binary_path",
-    shutil.which("parallel"),
-    "Path to the parallel executable.",
-)
-flags.DEFINE_string(
-    "tblastn_binary_path", shutil.which("tblastn"), "Path to the tblastn executable."
-)
-flags.DEFINE_string(
-    "foldseek_binary_path", shutil.which("foldseek"), "Path to the Foldseek executable."
-)
-flags.DEFINE_string(
-    "db_path",
-    None,
-    "Path to the target DNA sequence database.",
-)
-flags.DEFINE_string(
-    "foldseek_tsvfile",
-    None,
-    "Path to the foldseek m8-formatted file.",
-)
-flags.DEFINE_string(
-    "outfile_path",
-    None,
-    "Path to the output file.",
-)
-
-FLAGS = flags.FLAGS
 
 
 def parse_tsvfile(file: str) -> list[SeqRecord]:
@@ -111,18 +81,23 @@ def run_tblastn(
         f"-evalue {evalue} -db {db} -max_target_seqs {max_target_seqs} -outfmt \\'{outfmt}\\' -query -"
     )
     logging.info(f"Launching subprocess: {cmd}")
-    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process = subprocess.Popen(
+        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
     stdout, stderr = process.communicate()
     retcode = process.wait()
     if retcode != 0:
         raise RuntimeError(
-            f"tblastn failed with return code {retcode}.\n" f"stderr:\n{stderr.decode()}"
+            f"tblastn failed with return code {retcode}.\n"
+            f"stderr:\n{stderr.decode()}"
         )
     with open(outfile, "w") as fh:
         fh.write(stdout.decode())
 
 
-def collect_pident_plasmid(infile: str, outfile: Path, pident_threshold: float = 98.0) -> None:
+def collect_pident_plasmid(
+    infile: str, outfile: Path, pident_threshold: float = 98.0
+) -> None:
     """Collect plasmid accession ID from tblastn output file.
     The pident value should be greater than or equal to 98.0 (default).
     """
@@ -140,24 +115,69 @@ def collect_pident_plasmid(infile: str, outfile: Path, pident_threshold: float =
         fh.write("\n".join(df_filtered["saccver"].unique()))
 
 
-def main(argv):
-    if len(argv) > 1:
-        raise app.UsageError("Too many command-line arguments.")
-    foldseek_tsvfile = FLAGS.foldseek_tsvfile
+def main():
+    parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
+
+    binary_group = parser.add_argument_group("binary arguments", "")
+    binary_group.add_argument(
+        "--parallel_binary_path",
+        type=str,
+        default=shutil.which("parallel"),
+        help="Path to the parallel executable.",
+    )
+    binary_group.add_argument(
+        "--tblastn_binary_path",
+        type=str,
+        default=shutil.which("tblastn"),
+        help="Path to the tblastn executable.",
+    )
+    binary_group.add_argument(
+        "--foldseek_binary_path",
+        type=str,
+        default=shutil.which("foldseek"),
+        help="Path to the Foldseek executable.",
+    )
+
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="%(prog)s 0.1.0",
+    )
+    parser.add_argument(
+        "--db_path",
+        type=str,
+        default=None,
+        help="Path to the database file.",
+    )
+    parser.add_argument(
+        "--foldseek_tsvfile",
+        type=str,
+        default=None,
+        help="Path to the foldseek m8-formatted file.",
+    )
+    parser.add_argument(
+        "--outfile_path",
+        type=str,
+        default=None,
+        help="Path to the output file.",
+    )
+
+    args = parser.parse_args()
+    foldseek_tsvfile = args.foldseek_tsvfile
     foldseekhits = parse_tsvfile(foldseek_tsvfile)
     logging.info("creating foldseekhits_nodup.fasta")
     with open("foldseekhit_nodups.fasta", "w") as fh:
         SeqIO.write(remove_duplicates(foldseekhits), fh, "fasta")
 
     run_tblastn(
-        tblastn_binary_path=FLAGS.tblastn_binary_path,
-        parallel_binary_path=FLAGS.parallel_binary_path,
-        db=FLAGS.db_path,
+        tblastn_binary_path=args.tblastn_binary_path,
+        parallel_binary_path=args.parallel_binary_path,
+        db=args.db_path,
         input_fasta="foldseekhit_nodups.fasta",
         outfile="intermediate.tsv",
     )
-    collect_pident_plasmid("intermediate.tsv", FLAGS.outfile_path, pident_threshold=98.0)
+    collect_pident_plasmid("intermediate.tsv", args.outfile_path, pident_threshold=98.0)
 
 
 if __name__ == "__main__":
-    app.run(main)
+    main()

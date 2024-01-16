@@ -25,24 +25,17 @@ dynamic = ["version"]
 [project.optional-dependencies]
 dev = ["pytest", "flake8", "mypy", "black"]
 
-[tool]
-rye = { dev-dependencies = [
-    "ipython>=8.18.1",
-    "ipykernel>=6.28.0",
-    "pytest>=7.4.4",
+[project.scripts]
+repseek = 'repseek:main'
+
+[tool.rye]
+dev-dependencies = [
+    "black>=23.12.1",
     "notebook>=7.0.6",
-] }
+    "pytest>=7.4.4",
+    "ipykernel>=6.28.0",
+    "ipython>=8.20.0",
+]
 
-[tool.setuptools]
-package-dir = { "" = "repseek" }
-
-[tool.setuptools_scm]
-write_to = "repseek/_version.py"
-version_scheme = "python-simplified-semver"
-local_scheme = "no-local-version"
-
-[tool.black]
-line-length = 100
-
-[tool.flake8]
-max-line-length = 100
+[tool.rye.managed]
+managed = true
