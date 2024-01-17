@@ -3,14 +3,55 @@
 from pathlib import Path
 from absl import logging
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+import os
 import pandas as pd
 import subprocess
 import shutil
+import tempfile
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
 logging.set_verbosity(logging.INFO)
+
+
+def run_foldseek(
+    pdbfile: str,
+    foldseek_binary_path: str,
+    foldseek_db_path: str,
+    outtsvfile: str,
+    dbtype: str = "afdb50",
+    outfmt: str = "qaccver saccver pident length evalue bitscore",
+) -> None:
+    """Run Foldseek.
+    Args:
+        pdbfile: Path to input pdb file.
+        foldseek_binary_path: Path to Foldseek binary.
+        foldseek_db_path: Path to Foldseek database.
+    Raises:
+        FileNotFoundError: If binary_path is not found.
+    """
+    if not Path(foldseek_binary_path).exists():
+        raise FileNotFoundError(f"{foldseek_binary_path} not found.")
+    if not Path(foldseek_db_path).exists():
+        raise FileNotFoundError(f"{foldseek_db_path} not found.")
+    cmd = (
+        f"{foldseek_binary_path} easy-search {pdbfile} {foldseek_db_path}/{dbtype} {outtsvfile}"
+        f"tmp --alignment-type 2 --db-load-mode 2 --max-seqs 1000 -e 10 -s 9.5 --threads 4"
+        f"--prefilter-mode 1 --cluster-search 1 --tmscore-threshold 0.3 --format-mode 4 --remove-tmp-files 0"
+        f"--format-output \\'{outfmt}\\'"
+    )
+    logging.info(f"Launching subprocess: {cmd}")
+    process = subprocess.Popen(
+        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    stdout, stderr = process.communicate()
+    retcode = process.wait()
+    if retcode != 0:
+        raise RuntimeError(
+            f"Foldseek failed with return code {retcode}.\n"
+            f"stderr:\n{stderr.decode()}"
+        )
 
 
 def parse_tsvfile(file: str) -> list[SeqRecord]:
@@ -96,7 +137,7 @@ def run_tblastn(
 
 
 def collect_pident_plasmid(
-    infile: str, outfile: Path, pident_threshold: float = 98.0
+    infile: str, outfile: str, pident_threshold: float = 98.0
 ) -> None:
     """Collect plasmid accession ID from tblastn output file.
     The pident value should be greater than or equal to 98.0 (default).
@@ -120,63 +161,81 @@ def main():
 
     binary_group = parser.add_argument_group("binary arguments", "")
     binary_group.add_argument(
-        "--parallel_binary_path",
+        "--parallel-binary-path",
         type=str,
         default=shutil.which("parallel"),
         help="Path to the parallel executable.",
     )
     binary_group.add_argument(
-        "--tblastn_binary_path",
+        "--tblastn-binary-path",
         type=str,
         default=shutil.which("tblastn"),
         help="Path to the tblastn executable.",
     )
     binary_group.add_argument(
-        "--foldseek_binary_path",
+        "--foldseek-binary-path",
         type=str,
         default=shutil.which("foldseek"),
         help="Path to the Foldseek executable.",
     )
 
     parser.add_argument(
+        "-v",
         "--version",
         action="version",
         version="%(prog)s 0.1.0",
     )
     parser.add_argument(
-        "--db_path",
+        "-d",
+        "--db-path",
         type=str,
         default=None,
         help="Path to the database file.",
     )
     parser.add_argument(
-        "--foldseek_tsvfile",
+        "--foldseek-tsvfile",
         type=str,
         default=None,
         help="Path to the foldseek m8-formatted file.",
     )
     parser.add_argument(
-        "--outfile_path",
+        "-o",
+        "--outfile-path",
         type=str,
         default=None,
         help="Path to the output file.",
+    )
+    parser.add_argument(
+        "-k",
+        "--keep-tmpfile",
+        action="store_true",
+        help="Keep the temporary file.",
     )
 
     args = parser.parse_args()
     foldseek_tsvfile = args.foldseek_tsvfile
     foldseekhits = parse_tsvfile(foldseek_tsvfile)
-    logging.info("creating foldseekhits_nodup.fasta")
-    with open("foldseekhit_nodups.fasta", "w") as fh:
+    with tempfile.NamedTemporaryFile(delete=False, mode="w") as fh:
+        tmpfile_name = fh.name
         SeqIO.write(remove_duplicates(foldseekhits), fh, "fasta")
+    if args.keep_tmpfile:
+        logging.info(f"keeping {tmpfile_name}")
+        shutil.copy(tmpfile_name, "foldseekhits_nodup.fasta")
+        os.remove(tmpfile_name)
 
+    intermediate_file = tempfile.NamedTemporaryFile(delete=False, mode="w").name
     run_tblastn(
         tblastn_binary_path=args.tblastn_binary_path,
         parallel_binary_path=args.parallel_binary_path,
         db=args.db_path,
-        input_fasta="foldseekhit_nodups.fasta",
-        outfile="intermediate.tsv",
+        input_fasta=tmpfile_name,
+        outfile=intermediate_file,
     )
-    collect_pident_plasmid("intermediate.tsv", args.outfile_path, pident_threshold=98.0)
+    if args.keep_tmpfile:
+        logging.info(f"keeping {tmpfile_name}")
+        shutil.copy(tmpfile_name, "foldseekhits_nodup.fasta")
+        os.remove(tmpfile_name)
+    collect_pident_plasmid(intermediate_file, args.outfile_path, pident_threshold=98.0)
 
 
 if __name__ == "__main__":
