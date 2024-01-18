@@ -11,15 +11,16 @@ import tempfile
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
+from typing import Union
 
 logging.set_verbosity(logging.INFO)
 
 
 def run_foldseek(
-    pdbfile: str,
-    foldseek_binary_path: str,
-    foldseek_db_path: str,
-    outtsvfile: str,
+    pdbfile: Union[str, Path],
+    foldseek_binary_path: Union[str, Path],
+    foldseek_db_path: Union[str, Path],
+    outtsvfile: Union[str, Path],
     dbtype: str = "afdb50",
     outfmt: str = "qaccver saccver pident length evalue bitscore",
 ) -> None:
@@ -178,7 +179,13 @@ def main():
         default=shutil.which("foldseek"),
         help="Path to the Foldseek executable.",
     )
-
+    parser.add_argument(
+        "-i",
+        "--input",
+        type=str,
+        default=None,
+        help="Path to the input file. pdb or foldseek tsv file are acceptable.",
+    )
     parser.add_argument(
         "-v",
         "--version",
@@ -191,12 +198,6 @@ def main():
         type=str,
         default=None,
         help="Path to the database file.",
-    )
-    parser.add_argument(
-        "--foldseek-tsvfile",
-        type=str,
-        default=None,
-        help="Path to the foldseek m8-formatted file.",
     )
     parser.add_argument(
         "-o",
@@ -213,7 +214,17 @@ def main():
     )
 
     args = parser.parse_args()
-    foldseek_tsvfile = args.foldseek_tsvfile
+    input = Path(args.input)
+    if input.suffix == ".pdb":
+        foldseek_tsvfile = Path(f"{input.stem}.tsv")
+        run_foldseek(
+            pdbfile=input,
+            foldseek_binary_path=args.foldseek_binary_path,
+            foldseek_db_path=args.db_path,
+            outtsvfile=foldseek_tsvfile,
+        )
+    elif input.suffix == ".tsv":
+        foldseek_tsvfile = input
     foldseekhits = parse_tsvfile(foldseek_tsvfile)
     with tempfile.NamedTemporaryFile(delete=False, mode="w") as fh:
         tmpfile_name = fh.name
