@@ -1,6 +1,9 @@
 import pytest
 import tempfile
-from repseek import parse_tsvfile, collect_pident_plasmid
+import shutil
+import os
+from pathlib import Path
+from repseek import parse_tsvfile, collect_pident_plasmid, run_foldseek  # type: ignore
 
 
 @pytest.fixture
@@ -14,9 +17,6 @@ def test_parse_tsvdile(open_foldseekhits):
     assert len(open_foldseekhits) == 650
     assert open_foldseekhits[0].id == "AF-P07676-F1-model_v4"
     assert len(open_foldseekhits[0].seq) == 382
-    # TODO: check whether the file contains
-    # "qaccver","saccver", "pident", "length", "evalue", "bitscore" colomns.
-    assert open_foldseekhits[0].saccver == "NC_000913.3"
 
 
 def test_collect_pident_plasmid():
@@ -32,7 +32,19 @@ def test_collect_pident_plasmid():
 
 
 def test_run_foldseek():
-    """test for run_foldseek() function."""
-    fastafile = "tests/inputfiles/rk2_TrfA2.fasta"
-    dbtype = "pdb"
-    run_foldseek()
+    """test for run_foldseek() function.
+    This test requires foldseek binary and foldseek database.
+    yayoi11-14 nodes have foldseek binary and database.
+    """
+    input = Path("tests/inputfiles/AF-P07676-F1-model_v4.pdb")
+    foldseek_binary_path = shutil.which("foldseek")
+    foldseek_binary_path = "/home/apps/foldseek/20231027/bin/foldseek"
+    foldseek_db_path = os.getenv("FOLDSEEKDB")
+    foldseek_db_path = "/scr/foldseek"
+    foldseek_tsvfile = f"{input.stem}.tsv"
+    run_foldseek(
+        pdbfile=input,
+        foldseek_binary_path=foldseek_binary_path,
+        foldseek_db_path=foldseek_db_path,
+        outtsvfile=foldseek_tsvfile,
+    )

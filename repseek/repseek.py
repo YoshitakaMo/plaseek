@@ -19,10 +19,10 @@ logging.set_verbosity(logging.INFO)
 def run_foldseek(
     pdbfile: Union[str, Path],
     foldseek_binary_path: Union[str, Path],
-    foldseek_db_path: Union[str, Path],
+    foldseek_db_path: str,
     outtsvfile: Union[str, Path],
     dbtype: str = "afdb50",
-    outfmt: str = "qaccver saccver pident length evalue bitscore",
+    outfmt: str = "query,target,qstart,pident,fident,nident,qend,qlen,tstart,tend,tlen,alnlen,evalue,bits,qseq,tseq,qaln,taln,qcov,tcov,taxid,taxname,taxlineage,qtmscore,ttmscore,alntmscore,prob",
 ) -> None:
     """Run Foldseek.
     Args:
@@ -37,10 +37,10 @@ def run_foldseek(
     if not Path(foldseek_db_path).exists():
         raise FileNotFoundError(f"{foldseek_db_path} not found.")
     cmd = (
-        f"{foldseek_binary_path} easy-search {pdbfile} {foldseek_db_path}/{dbtype} {outtsvfile}"
-        f"tmp --alignment-type 2 --db-load-mode 2 --max-seqs 1000 -e 10 -s 9.5 --threads 4"
-        f"--prefilter-mode 1 --cluster-search 1 --tmscore-threshold 0.3 --format-mode 4 --remove-tmp-files 0"
-        f"--format-output \\'{outfmt}\\'"
+        f"{foldseek_binary_path} easy-search {pdbfile} {foldseek_db_path}/{dbtype} {outtsvfile} "
+        f"tmp --alignment-type 2 --db-load-mode 2 --max-seqs 1000 -e 10 -s 9.5 --threads 4 "
+        f"--prefilter-mode 1 --cluster-search 1 --tmscore-threshold 0.3 --format-mode 4 --remove-tmp-files 1 "
+        f"--format-output '{outfmt}'"
     )
     logging.info(f"Launching subprocess: {cmd}")
     process = subprocess.Popen(
@@ -55,7 +55,7 @@ def run_foldseek(
         )
 
 
-def parse_tsvfile(file: str) -> list[SeqRecord]:
+def parse_tsvfile(file: Union[str, Path]) -> list[SeqRecord]:
     """Parse Foldseek result file in TSV format."""
     tsvfile = Path(file)
     df = pd.read_csv(tsvfile, sep="\t", header=0)
@@ -187,17 +187,22 @@ def main():
         help="Path to the input file. pdb or foldseek tsv file are acceptable.",
     )
     parser.add_argument(
+        "--foldseek-db-path",
+        type=str,
+        default=os.getenv("FOLDSEEKDB"),
+        help="Path to foldseek database.",
+    )
+    parser.add_argument(
         "-v",
         "--version",
         action="version",
         version="%(prog)s 0.1.0",
     )
     parser.add_argument(
-        "-d",
-        "--db-path",
+        "--target-sequence-db-path",
         type=str,
         default=None,
-        help="Path to the database file.",
+        help="Path to the target sequence database file.",
     )
     parser.add_argument(
         "-o",
@@ -220,32 +225,36 @@ def main():
         run_foldseek(
             pdbfile=input,
             foldseek_binary_path=args.foldseek_binary_path,
-            foldseek_db_path=args.db_path,
+            foldseek_db_path=args.foldseek_db_path,
             outtsvfile=foldseek_tsvfile,
         )
     elif input.suffix == ".tsv":
         foldseek_tsvfile = input
+    else:
+        raise ValueError("Invalid input file suffix: the suffix must be .pdb or .tsv.")
+
     foldseekhits = parse_tsvfile(foldseek_tsvfile)
+
     with tempfile.NamedTemporaryFile(delete=False, mode="w") as fh:
         tmpfile_name = fh.name
         SeqIO.write(remove_duplicates(foldseekhits), fh, "fasta")
     if args.keep_tmpfile:
         logging.info(f"keeping {tmpfile_name}")
-        shutil.copy(tmpfile_name, "foldseekhits_nodup.fasta")
+        shutil.copy(tmpfile_name, f"{input.stem}_nodup.fasta")
         os.remove(tmpfile_name)
 
     intermediate_file = tempfile.NamedTemporaryFile(delete=False, mode="w").name
     run_tblastn(
         tblastn_binary_path=args.tblastn_binary_path,
         parallel_binary_path=args.parallel_binary_path,
-        db=args.db_path,
+        db=args.target_sequence_db_path,
         input_fasta=tmpfile_name,
         outfile=intermediate_file,
     )
     if args.keep_tmpfile:
-        logging.info(f"keeping {tmpfile_name}")
-        shutil.copy(tmpfile_name, "foldseekhits_nodup.fasta")
-        os.remove(tmpfile_name)
+        logging.info(f"keeping {intermediate_file}")
+        shutil.copy(intermediate_file, "{input.stem}_im.tsv")
+        os.remove(intermediate_file)
     collect_pident_plasmid(intermediate_file, args.outfile_path, pident_threshold=98.0)
 
 
