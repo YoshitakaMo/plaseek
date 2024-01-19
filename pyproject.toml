@@ -1,9 +1,6 @@
-[build-system]
-requires = ["setuptools", "setuptools_scm"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "repseek"
+version = "0.0.1"
 description = "Search for plamid replication proteins based on protein structures"
 authors = [{ name = "Y.Moriwaki", email = "virgospica93@gmail.com" }]
 readme = "README.md"
@@ -20,22 +17,28 @@ classifiers = [
 ]
 requires-python = ">=3.9"
 dependencies = ["absl-py", "biopython", "pandas"]
-dynamic = ["version"]
 
-[project.optional-dependencies]
-dev = ["pytest", "flake8", "mypy", "black"]
-
-[project.scripts]
-repseek = 'repseek:main'
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.rye]
+managed = true
 dev-dependencies = [
     "black>=23.12.1",
     "notebook>=7.0.6",
     "pytest>=7.4.4",
     "ipykernel>=6.28.0",
     "ipython>=8.20.0",
+    "flake8>=7.0.0",
+    "mypy>=1.8.0",
 ]
 
-[tool.rye.managed]
-managed = true
+[project.scripts]
+repseek = 'repseek.repseek:main'
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["repseek"]
