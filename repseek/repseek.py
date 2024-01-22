@@ -286,7 +286,7 @@ def main():
         block=args.block,
     )
     if args.keep_tmpfile:
-        logging.info(f"keeping intermediate_file as f"{input.stem}_im.tsv")
+        logging.info(f"keeping intermediate_file as {input.stem}_im.tsv")
         shutil.copy(intermediate_file, f"{input.stem}_im.tsv")
     collect_pident_plasmid(intermediate_file, args.outfile_path, pident_threshold=98.0)
 
