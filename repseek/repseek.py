@@ -130,6 +130,8 @@ def run_tblastn(
         raise FileNotFoundError(f"{tblastn_binary_path} not found.")
     if not Path(parallel_binary_path).exists():
         raise FileNotFoundError(f"{parallel_binary_path} not found.")
+    if not Path(f"{db}.ndb").exists():
+        raise FileNotFoundError(f"{db} not found.")
     cmd = (
         f"cat {input_fasta} | {parallel_binary_path} --block {block} --recstart '>' --pipe {tblastn_binary_path} "
         f"-evalue {evalue} -db {db} -max_target_seqs {max_target_seqs} -outfmt \\'{outfmt}\\' -query -"
@@ -270,9 +272,8 @@ def main():
         tmpfile_name = fh.name
         SeqIO.write(remove_duplicates(foldseekhits), fh, "fasta")
     if args.keep_tmpfile:
-        logging.info(f"keeping {tmpfile_name}")
+        logging.info(f"keeping no duplicate fasta file: {input.stem}_nodup.fasta")
         shutil.copy(tmpfile_name, f"{input.stem}_nodup.fasta")
-        os.remove(tmpfile_name)
 
     intermediate_file = tempfile.NamedTemporaryFile(delete=False, mode="w").name
     run_tblastn(
@@ -285,9 +286,8 @@ def main():
         block=args.block,
     )
     if args.keep_tmpfile:
-        logging.info(f"keeping {intermediate_file}")
-        shutil.copy(intermediate_file, "{input.stem}_im.tsv")
-        os.remove(intermediate_file)
+        logging.info(f"keeping intermediate_file as f"{input.stem}_im.tsv")
+        shutil.copy(intermediate_file, f"{input.stem}_im.tsv")
     collect_pident_plasmid(intermediate_file, args.outfile_path, pident_threshold=98.0)
 
 
