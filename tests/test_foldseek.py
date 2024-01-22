@@ -32,10 +32,6 @@ def test_collect_pident_plasmid():
     assert open(output).read() == open("tests/inputfiles/test_output.txt").read()
 
 
-def test_run_foldseek():
-    pass
-
-
 #     """test for run_foldseek() function.
 #     This test requires foldseek binary and foldseek database.
 #     yayoi11-14 nodes have foldseek binary and database.

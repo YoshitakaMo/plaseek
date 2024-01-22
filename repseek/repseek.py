@@ -16,6 +16,18 @@ from typing import Union
 logging.set_verbosity(logging.INFO)
 
 
+def check_binaries_available(
+    parallel_binary_path: str, tblastn_binary_path: str, foldseek_binary_path: str
+) -> None:
+    """Check if binaries are available."""
+    if not Path(parallel_binary_path).exists():
+        raise FileNotFoundError("foldseek not found. Please set PATH to foldseek.")
+    if not Path(tblastn_binary_path).exists():
+        raise FileNotFoundError("tblastn not found. Please set PATH to tblastn.")
+    if not Path(foldseek_binary_path).exists():
+        raise FileNotFoundError("parallel not found. Please set PATH to parallel.")
+
+
 def run_foldseek(
     pdbfile: Union[str, Path],
     foldseek_binary_path: Union[str, Path],
@@ -196,13 +208,26 @@ def main():
         "-v",
         "--version",
         action="version",
-        version="%(prog)s 0.1.0",
+        version="%(prog)s 0.0.1",
     )
-    parser.add_argument(
+    tblastn_group = parser.add_argument_group("tblastn arguments", "")
+    tblastn_group.add_argument(
         "--target-sequence-db-path",
         type=str,
         default=None,
-        help="Path to the target sequence database file.",
+        help="Path to the target sequence database file for tblastn.",
+    )
+    tblastn_group.add_argument(
+        "--evalue",
+        type=float,
+        default=1e-100,
+        help="E-value threshold for tblastn.",
+    )
+    tblastn_group.add_argument(
+        "--block",
+        type=int,
+        default=2000,
+        help="Block size for tblastn.",
     )
     parser.add_argument(
         "-o",
@@ -219,7 +244,13 @@ def main():
     )
 
     args = parser.parse_args()
+
+    check_binaries_available(
+        args.parallel_binary_path, args.tblastn_binary_path, args.foldseek_binary_path
+    )
+
     input = Path(args.input)
+    # TODO: available for mmCIF format.
     if input.suffix == ".pdb":
         foldseek_tsvfile = Path(f"{input.stem}.tsv")
         run_foldseek(
@@ -250,6 +281,8 @@ def main():
         db=args.target_sequence_db_path,
         input_fasta=tmpfile_name,
         outfile=intermediate_file,
+        evalue=args.evalue,
+        block=args.block,
     )
     if args.keep_tmpfile:
         logging.info(f"keeping {intermediate_file}")
