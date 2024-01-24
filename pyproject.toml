@@ -1,5 +1,5 @@
 [project]
-name = "repseek"
+name = "plaseek"
 version = "0.0.1"
 description = "Search for plamid replication proteins based on protein structures"
 authors = [{ name = "Y.Moriwaki", email = "virgospica93@gmail.com" }]
@@ -35,10 +35,10 @@ dev-dependencies = [
 ]
 
 [project.scripts]
-repseek = 'repseek.repseek:main'
+plaseek = 'plaseek.plaseek:main'
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["repseek"]
+packages = ["plaseek"]

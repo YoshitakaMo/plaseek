@@ -109,7 +109,7 @@ def run_tblastn(
     outfile: str,
     evalue: float = 1e-100,
     block: int = 2000,
-    outfmt: str = "6 qaccver saccver pident length evalue bitscore",
+    outfmt: str = "6 qaccver saccver pident length qstart qend sstart send qseq sseq qframe sframe evalue bitscore",
     max_target_seqs: int = 10000,
 ) -> None:
     """Python wrapper for tblastn
@@ -151,24 +151,89 @@ def run_tblastn(
         fh.write(stdout.decode())
 
 
-def collect_pident_plasmid(
-    infile: str, outfile: str, pident_threshold: float = 98.0
-) -> None:
+def filtering_by_pident(
+    infile: str,
+    pident_threshold: float = 98.0,
+    sort_values: str = "saccver",
+) -> pd.DataFrame:
     """Collect plasmid accession ID from tblastn output file.
     The pident value should be greater than or equal to 98.0 (default).
     """
     df = pd.read_csv(infile, sep="\t", header=None)
+    # qaccver saccver pident length qstart qend sstart send qseq sseq qframe sframe evalue bitscore
     df.columns = [
         "qaccver",
         "saccver",
         "pident",
         "length",
+        "qstart",
+        "qend",
+        "sstart",
+        "send",
+        "qseq",
+        "sseq",
+        "qframe",
+        "sframe",
         "evalue",
         "bitscore",
     ]
     df_filtered = df[df["pident"] >= pident_threshold]
-    with open(outfile, "w") as fh:
-        fh.write("\n".join(df_filtered["saccver"].unique()))
+    # sort by sort_values (default: saccver)
+    df_filtered_sorted = df_filtered.sort_values(by=[f"{sort_values}"])
+    return df_filtered_sorted
+
+
+def get_unique_seq_regions_from_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Get unique sequence regions from a dataframe."""
+    df_unique = df.drop_duplicates(subset=["saccver", "sstart", "send"])
+    return df_unique
+
+
+def run_blastdbcmd(
+    blastdbcmd_binary_path: str | None,
+    parallel_binary_path: str | None,
+    db: str,
+    df: pd.DataFrame,
+) -> None:
+    """
+    Run blastdbcmd to extract the sequence of the hit region.
+    Use GNU parallel to accelerate the process.
+    args:
+        blastdbcmd_binary_path: Path to the blastdbcmd binary.
+        parallel_binary_path: Path to the parallel binary.
+        db: Path to the database file.
+        df: Dataframe containing the hit regions.
+    For example:
+    parallel blastdbcmd -db ../db/P476DB -entry {df["sccver"]} -range {df["sstart"]}-{df["send]}
+    """
+    if blastdbcmd_binary_path is None:
+        blastdbcmd_binary_path = str(shutil.which("blastdbcmd"))
+    if parallel_binary_path is None:
+        parallel_binary_path = str(shutil.which("parallel"))
+
+    with tempfile.NamedTemporaryFile(delete=False, mode="w") as fh:
+        df_unique = get_unique_seq_regions_from_df(df)
+        # write df_unique["saccver"], df_unique["sstart"], and df_unique["send"] to a temporary file.
+        df_unique.to_csv(
+            fh,
+            sep="\t",
+            columns=["saccver", "sstart", "send"],
+            header=False,
+            index=False,
+        )
+        tmpfile = fh.name
+    cmd = f"parallel -a {tmpfile} --colsep '\\t' 'blastdbcmd -db {db} -entry {{1}} -range {{2}}-{{3}}' ::: {{}}"
+    logging.info(f"Launching subprocess: {cmd}")
+    process = subprocess.Popen(
+        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    stdout, stderr = process.communicate()
+    retcode = process.wait()
+    if retcode != 0:
+        raise RuntimeError(
+            f"blastdbcmd failed with return code {retcode}.\n"
+            f"stderr:\n{stderr.decode()}"
+        )
 
 
 def main():
@@ -228,7 +293,7 @@ def main():
     tblastn_group.add_argument(
         "--block",
         type=int,
-        default=2000,
+        default=1500,
         help="Block size for tblastn.",
     )
     parser.add_argument(
@@ -237,12 +302,6 @@ def main():
         type=str,
         default=None,
         help="Path to the output file.",
-    )
-    parser.add_argument(
-        "-k",
-        "--keep-tmpfile",
-        action="store_true",
-        help="Keep the temporary file.",
     )
 
     args = parser.parse_args()
@@ -268,27 +327,22 @@ def main():
 
     foldseekhits = parse_tsvfile(foldseek_tsvfile)
 
-    with tempfile.NamedTemporaryFile(delete=False, mode="w") as fh:
-        tmpfile_name = fh.name
+    nodup_fasta = f"{input.stem}_nodup.fasta"
+    with open(nodup_fasta, "w") as fh:
         SeqIO.write(remove_duplicates(foldseekhits), fh, "fasta")
-    if args.keep_tmpfile:
-        logging.info(f"keeping no duplicate fasta file: {input.stem}_nodup.fasta")
-        shutil.copy(tmpfile_name, f"{input.stem}_nodup.fasta")
 
-    intermediate_file = tempfile.NamedTemporaryFile(delete=False, mode="w").name
+    tblastn_result = f"{input.stem}_tblastn.tsv"
     run_tblastn(
         tblastn_binary_path=args.tblastn_binary_path,
         parallel_binary_path=args.parallel_binary_path,
         db=args.target_sequence_db_path,
-        input_fasta=tmpfile_name,
-        outfile=intermediate_file,
+        input_fasta=nodup_fasta,
+        outfile=tblastn_result,
         evalue=args.evalue,
         block=args.block,
     )
-    if args.keep_tmpfile:
-        logging.info(f"keeping intermediate_file as {input.stem}_im.tsv")
-        shutil.copy(intermediate_file, f"{input.stem}_im.tsv")
-    collect_pident_plasmid(intermediate_file, args.outfile_path, pident_threshold=98.0)
+
+    # hit_df = filtering_by_pident(tblastn_result, pident_threshold=98.0)
 
 
 if __name__ == "__main__":

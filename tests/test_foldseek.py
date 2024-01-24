@@ -2,9 +2,7 @@ import pytest
 import tempfile
 
 # import shutil
-# import os
-# from pathlib import Path
-from repseek.repseek import parse_tsvfile, collect_pident_plasmid  # type: ignore
+from plaseek.plaseek import parse_tsvfile, filtering_by_pident
 
 
 @pytest.fixture
@@ -20,31 +18,12 @@ def test_parse_tsvdile(open_foldseekhits):
     assert len(open_foldseekhits[0].seq) == 382
 
 
-def test_collect_pident_plasmid():
-    """test for collect_pident_plasmid() function."""
+def test_filtering_by_pident():
+    """test for filtering_by_pident() function."""
     tsvfile = "tests/inputfiles/test_intermediate.tsv"
     output = tempfile.NamedTemporaryFile(suffix=".txt", delete=False).name
-    collect_pident_plasmid(
+    filtering_by_pident(
         tsvfile,
-        output,
         pident_threshold=98.0,
     )
     assert open(output).read() == open("tests/inputfiles/test_output.txt").read()
-
-
-#     """test for run_foldseek() function.
-#     This test requires foldseek binary and foldseek database.
-#     yayoi11-14 nodes have foldseek binary and database.
-#     """
-#     input = Path("tests/inputfiles/AF-P07676-F1-model_v4.pdb")
-#     foldseek_binary_path = shutil.which("foldseek")
-#     foldseek_binary_path = "/home/apps/foldseek/20231027/bin/foldseek"
-#     foldseek_db_path = os.getenv("FOLDSEEKDB")
-#     foldseek_db_path = "/scr/foldseek"
-#     foldseek_tsvfile = f"{input.stem}.tsv"
-#     run_foldseek(
-#         pdbfile=input,
-#         foldseek_binary_path=foldseek_binary_path,
-#         foldseek_db_path=foldseek_db_path,
-#         outtsvfile=foldseek_tsvfile,
-#     )

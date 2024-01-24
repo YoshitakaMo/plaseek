@@ -1,4 +1,4 @@
-# repseek
+# plaseek
 
 Search for plamid replication proteins based on protein structures
 
@@ -29,9 +29,9 @@ makeblastdb -in Pseudomonas_plasmids_847.fasta -dbtype nucl -out P847DB -parse_s
 
 ```bash
 # show help message
-repseek -h
-# run repseek with default parameters
-repseek -i AF-P07676-F1-model_v4.pdb \
+plaseek -h
+# run plaseek with default parameters
+plaseek -i AF-P07676-F1-model_v4.pdb \
         --foldseek-db-path /scr/foldseek \
         --target-sequence-db-path ../../db/P847DB \
         -o results.txt
