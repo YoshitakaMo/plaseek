@@ -5,13 +5,15 @@ from absl import logging
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import os
 import pandas as pd
-import subprocess
 import shutil
-import tempfile
+import time
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from typing import Union
+import plaseek.tools.foldseek
+import plaseek.tools.blastdbcmd
+import plaseek.tools.tblastn
 
 logging.set_verbosity(logging.INFO)
 
@@ -28,127 +30,67 @@ def check_binaries_available(
         raise FileNotFoundError("parallel not found. Please set PATH to parallel.")
 
 
-def run_foldseek(
-    pdbfile: Union[str, Path],
-    foldseek_binary_path: Union[str, Path],
-    foldseek_db_path: str,
-    outtsvfile: Union[str, Path],
-    dbtype: str = "afdb50",
-    outfmt: str = "query,target,qstart,pident,fident,nident,qend,qlen,tstart,tend,tlen,alnlen,evalue,bits,qseq,tseq,qaln,taln,qcov,tcov,taxid,taxname,taxlineage,qtmscore,ttmscore,alntmscore,prob",
-) -> None:
-    """Run Foldseek.
-    Args:
-        pdbfile: Path to input pdb file.
-        foldseek_binary_path: Path to Foldseek binary.
-        foldseek_db_path: Path to Foldseek database.
-    Raises:
-        FileNotFoundError: If binary_path is not found.
+def filtering_m8file(
+    file: Union[str, Path], eval_threshold: float = 1e-10
+) -> pd.DataFrame:
+    """Filtering Foldseek result file in M8 format.
+    filter by e-value < 1e-10
+    The header is "query,theader,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,prob,evalue,bits,qlen,tlen,qaln,taln,tca,tseq,taxid,taxname".
     """
-    if not Path(foldseek_binary_path).exists():
-        raise FileNotFoundError(f"{foldseek_binary_path} not found.")
-    if not Path(foldseek_db_path).exists():
-        raise FileNotFoundError(f"{foldseek_db_path} not found.")
-    cmd = (
-        f"{foldseek_binary_path} easy-search {pdbfile} {foldseek_db_path}/{dbtype} {outtsvfile} "
-        f"tmp --alignment-type 2 --db-load-mode 2 --max-seqs 1000 -e 10 -s 9.5 --threads 4 "
-        f"--prefilter-mode 1 --cluster-search 1 --tmscore-threshold 0.3 --format-mode 4 --remove-tmp-files 1 "
-        f"--format-output '{outfmt}'"
+    m8file = Path(file)
+    df = pd.read_csv(
+        m8file,
+        sep="\t",
+        names=[
+            "query",
+            "theader",
+            "pident",
+            "alnlen",
+            "mismatch",
+            "gapopen",
+            "qstart",
+            "qend",
+            "tstart",
+            "tend",
+            "prob",
+            "evalue",
+            "bits",
+            "qlen",
+            "tlen",
+            "qaln",
+            "taln",
+            "tca",
+            "tseq",
+            "taxid",
+            "taxname",
+        ],
     )
-    logging.info(f"Launching subprocess: {cmd}")
-    process = subprocess.Popen(
-        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
-    stdout, stderr = process.communicate()
-    retcode = process.wait()
-    if retcode != 0:
-        raise RuntimeError(
-            f"Foldseek failed with return code {retcode}.\n"
-            f"stderr:\n{stderr.decode()}"
-        )
+    df_filtered = df[df["evalue"] < eval_threshold]
+    return df_filtered
 
 
-def parse_tsvfile(file: Union[str, Path]) -> list[SeqRecord]:
-    """Parse Foldseek result file in TSV format."""
-    tsvfile = Path(file)
-    df = pd.read_csv(tsvfile, sep="\t", header=0)
-    foldseekhits = [
-        SeqRecord(
-            id=row["target"],
-            name=row["target"],
-            seq=Seq(row["tseq"]),
-            description=f"pident={row['pident']}, taxid={row['taxid']}, taxname={row['taxname']}, "
-            f"taxlineage={row['taxlineage']}",
-        )
-        for _, row in df.iterrows()
-    ]
-    return foldseekhits
-
-
-def remove_duplicates(hits: list[SeqRecord]) -> list[SeqRecord]:
+def remove_duplicates(hits: pd.DataFrame) -> list[SeqRecord]:
     """Remove duplicate sequences from a fasta file.
 
     Args:
-        hits (list[SeqRecord])]):
+        hits (pd.DataFrame):
     Returns:
         list[SeqRecord]: List of SeqRecord objects.
     """
     seen = set()
     nodups = []
-    for hit in hits:
-        if hit.seq not in seen:
-            nodups.append(hit)
-            seen.add(hit.seq)
+    for _, row in hits.iterrows():
+        if row["tseq"] not in seen:
+            nodups.append(
+                SeqRecord(
+                    id=row["theader"],
+                    name=row["theader"],
+                    seq=Seq(row["tseq"]),
+                    description=f"pident={row['pident']}, evalue={row['evalue']} taxid={row['taxid']}, taxname={row['taxname']}, ",
+                )
+            )
+            seen.add(row["tseq"])
     return nodups
-
-
-def run_tblastn(
-    tblastn_binary_path: str,
-    parallel_binary_path: str,
-    input_fasta: str,
-    db: str,
-    outfile: str,
-    evalue: float = 1e-100,
-    block: int = 2000,
-    outfmt: str = "6 qaccver saccver pident length qstart qend sstart send qseq sseq qframe sframe evalue bitscore",
-    max_target_seqs: int = 10000,
-) -> None:
-    """Python wrapper for tblastn
-    Args:
-        tblastn_binary_path: Path to tblastn binary.
-        input_fasta_path: Path to input fasta file.
-        db: Path to database file.
-        evalue: E-value threshold.
-        block: Block size.
-        outfmt: Output format.
-        max_target_seqs: Maximum number of target sequences.
-    Raises:
-        FileNotFoundError: If binary_path or db is not found.
-    """
-    # Requires GNU parallel.
-    # https://www.biostars.org/p/76009/
-    if not Path(tblastn_binary_path).exists():
-        raise FileNotFoundError(f"{tblastn_binary_path} not found.")
-    if not Path(parallel_binary_path).exists():
-        raise FileNotFoundError(f"{parallel_binary_path} not found.")
-    if not Path(f"{db}.ndb").exists():
-        raise FileNotFoundError(f"{db} not found.")
-    cmd = (
-        f"cat {input_fasta} | {parallel_binary_path} --block {block} --recstart '>' --pipe {tblastn_binary_path} "
-        f"-evalue {evalue} -db {db} -max_target_seqs {max_target_seqs} -outfmt \\'{outfmt}\\' -query -"
-    )
-    logging.info(f"Launching subprocess: {cmd}")
-    process = subprocess.Popen(
-        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
-    stdout, stderr = process.communicate()
-    retcode = process.wait()
-    if retcode != 0:
-        raise RuntimeError(
-            f"tblastn failed with return code {retcode}.\n"
-            f"stderr:\n{stderr.decode()}"
-        )
-    with open(outfile, "w") as fh:
-        fh.write(stdout.decode())
 
 
 def filtering_by_pident(
@@ -159,81 +101,12 @@ def filtering_by_pident(
     """Collect plasmid accession ID from tblastn output file.
     The pident value should be greater than or equal to 98.0 (default).
     """
-    df = pd.read_csv(infile, sep="\t", header=None)
-    # qaccver saccver pident length qstart qend sstart send qseq sseq qframe sframe evalue bitscore
-    df.columns = [
-        "qaccver",
-        "saccver",
-        "pident",
-        "length",
-        "qstart",
-        "qend",
-        "sstart",
-        "send",
-        "qseq",
-        "sseq",
-        "qframe",
-        "sframe",
-        "evalue",
-        "bitscore",
-    ]
+    df = pd.read_csv(infile, sep="\t", header=0)
+
     df_filtered = df[df["pident"] >= pident_threshold]
     # sort by sort_values (default: saccver)
     df_filtered_sorted = df_filtered.sort_values(by=[f"{sort_values}"])
     return df_filtered_sorted
-
-
-def get_unique_seq_regions_from_df(df: pd.DataFrame) -> pd.DataFrame:
-    """Get unique sequence regions from a dataframe."""
-    df_unique = df.drop_duplicates(subset=["saccver", "sstart", "send"])
-    return df_unique
-
-
-def run_blastdbcmd(
-    blastdbcmd_binary_path: str | None,
-    parallel_binary_path: str | None,
-    db: str,
-    df: pd.DataFrame,
-) -> None:
-    """
-    Run blastdbcmd to extract the sequence of the hit region.
-    Use GNU parallel to accelerate the process.
-    args:
-        blastdbcmd_binary_path: Path to the blastdbcmd binary.
-        parallel_binary_path: Path to the parallel binary.
-        db: Path to the database file.
-        df: Dataframe containing the hit regions.
-    For example:
-    parallel blastdbcmd -db ../db/P476DB -entry {df["sccver"]} -range {df["sstart"]}-{df["send]}
-    """
-    if blastdbcmd_binary_path is None:
-        blastdbcmd_binary_path = str(shutil.which("blastdbcmd"))
-    if parallel_binary_path is None:
-        parallel_binary_path = str(shutil.which("parallel"))
-
-    with tempfile.NamedTemporaryFile(delete=False, mode="w") as fh:
-        df_unique = get_unique_seq_regions_from_df(df)
-        # write df_unique["saccver"], df_unique["sstart"], and df_unique["send"] to a temporary file.
-        df_unique.to_csv(
-            fh,
-            sep="\t",
-            columns=["saccver", "sstart", "send"],
-            header=False,
-            index=False,
-        )
-        tmpfile = fh.name
-    cmd = f"parallel -a {tmpfile} --colsep '\\t' 'blastdbcmd -db {db} -entry {{1}} -range {{2}}-{{3}}' ::: {{}}"
-    logging.info(f"Launching subprocess: {cmd}")
-    process = subprocess.Popen(
-        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
-    stdout, stderr = process.communicate()
-    retcode = process.wait()
-    if retcode != 0:
-        raise RuntimeError(
-            f"blastdbcmd failed with return code {retcode}.\n"
-            f"stderr:\n{stderr.decode()}"
-        )
 
 
 def main():
@@ -293,8 +166,15 @@ def main():
     tblastn_group.add_argument(
         "--block",
         type=int,
-        default=1500,
+        default=3000,
         help="Block size for tblastn.",
+    )
+    parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=4,
+        help="Number of parallel jobs.",
     )
     parser.add_argument(
         "-o",
@@ -311,38 +191,50 @@ def main():
     )
 
     input = Path(args.input)
-    # TODO: available for mmCIF format.
     if input.suffix == ".pdb":
-        foldseek_tsvfile = Path(f"{input.stem}.tsv")
-        run_foldseek(
+        foldseek_m8file = Path(f"{input.stem}.m8")
+        plaseek.tools.foldseek.run_foldseek(
             pdbfile=input,
             foldseek_binary_path=args.foldseek_binary_path,
             foldseek_db_path=args.foldseek_db_path,
-            outtsvfile=foldseek_tsvfile,
+            outtsvfile=foldseek_m8file,
+            jobs=args.jobs,
         )
-    elif input.suffix == ".tsv":
-        foldseek_tsvfile = input
+    elif input.suffix == ".m8":
+        foldseek_m8file = input
     else:
-        raise ValueError("Invalid input file suffix: the suffix must be .pdb or .tsv.")
+        raise ValueError("Invalid input file suffix: the suffix must be .pdb or .m8.")
 
-    foldseekhits = parse_tsvfile(foldseek_tsvfile)
+    filtered_foldseekhits: pd.DataFrame = filtering_m8file(foldseek_m8file)
 
     nodup_fasta = f"{input.stem}_nodup.fasta"
     with open(nodup_fasta, "w") as fh:
-        SeqIO.write(remove_duplicates(foldseekhits), fh, "fasta")
+        SeqIO.write(remove_duplicates(filtered_foldseekhits), fh, "fasta")
 
     tblastn_result = f"{input.stem}_tblastn.tsv"
-    run_tblastn(
-        tblastn_binary_path=args.tblastn_binary_path,
-        parallel_binary_path=args.parallel_binary_path,
+    start = time.perf_counter()
+    plaseek.tools.tblastn.run_tblastn(
         db=args.target_sequence_db_path,
         input_fasta=nodup_fasta,
         outfile=tblastn_result,
-        evalue=args.evalue,
         block=args.block,
+        tblastn_binary_path=args.tblastn_binary_path,
+        parallel_binary_path=args.parallel_binary_path,
+        evalue=args.evalue,
     )
+    duration = time.perf_counter() - start
+    print(f"{duration} seconds.")
 
-    # hit_df = filtering_by_pident(tblastn_result, pident_threshold=98.0)
+    filtered_tblastn = filtering_by_pident(tblastn_result, pident_threshold=98.0)
+
+    plaseek.tools.blastdbcmd.run_blastdbcmd(
+        blastdbcmd_binary_path=args.blastdbcmd_binary_path,
+        parallel_binary_path=args.parallel_binary_path,
+        outfile=args.outfile_path,
+        db=args.target_sequence_db_path,
+        df=filtered_tblastn,
+        jobs=args.jobs,
+    )
 
 
 if __name__ == "__main__":
