@@ -19,15 +19,13 @@ logging.set_verbosity(logging.INFO)
 
 
 def check_binaries_available(
-    parallel_binary_path: str, tblastn_binary_path: str, foldseek_binary_path: str
+    parallel_binary_path: str, tblastn_binary_path: str
 ) -> None:
     """Check if binaries are available."""
     if not Path(parallel_binary_path).exists():
-        raise FileNotFoundError("foldseek not found. Please set PATH to foldseek.")
+        raise FileNotFoundError("parallel not found. Please set PATH to GNU parallel.")
     if not Path(tblastn_binary_path).exists():
         raise FileNotFoundError("tblastn not found. Please set PATH to tblastn.")
-    if not Path(foldseek_binary_path).exists():
-        raise FileNotFoundError("parallel not found. Please set PATH to parallel.")
 
 
 def filtering_m8file(
@@ -131,6 +129,12 @@ def main():
         default=shutil.which("foldseek"),
         help="Path to the Foldseek executable.",
     )
+    binary_group.add_argument(
+        "--blastdbcmd-binary-path",
+        type=str,
+        default=shutil.which("blastdbcmd"),
+        help="Path to the blastdbcmd executable.",
+    )
     parser.add_argument(
         "-i",
         "--input",
@@ -186,12 +190,16 @@ def main():
 
     args = parser.parse_args()
 
-    check_binaries_available(
-        args.parallel_binary_path, args.tblastn_binary_path, args.foldseek_binary_path
-    )
+    check_binaries_available(args.parallel_binary_path, args.tblastn_binary_path)
 
     input = Path(args.input)
     if input.suffix == ".pdb":
+        if args.foldseek_binary_path is None:
+            raise ValueError("Please set PATH to Foldseek by --foldseek-binary-path.")
+        if args.foldseek_db_path is None:
+            raise ValueError(
+                "Please set PATH to Foldseek database by --foldseek-db-path."
+            )
         foldseek_m8file = Path(f"{input.stem}.m8")
         plaseek.tools.foldseek.run_foldseek(
             pdbfile=input,
