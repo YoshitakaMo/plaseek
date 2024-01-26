@@ -12,7 +12,7 @@ def run_tblastn(
     block: int = 3000,
     tblastn_binary_path: Optional[str] = shutil.which("tblastn"),
     parallel_binary_path: Optional[str] = shutil.which("parallel"),
-    evalue: float = 1e-100,
+    evalue: float = 1e-50,
     outfmt: str = "6 qaccver saccver pident length qstart qend sstart send qseq sseq qframe sframe evalue bitscore",
     max_target_seqs: int = 10000,
 ) -> None:
