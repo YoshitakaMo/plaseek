@@ -175,14 +175,20 @@ def main():
         "--foldseek_evalue_threshold",
         type=float,
         default=1e-20,
-        help="evalue threshold for Foldseek. (default: 1e-20)",
+        help="evalue threshold for Foldseek.",
     )
     tblastn_group = parser.add_argument_group("tblastn arguments", "")
+    tblastn_group.add_argument(
+        "--tblastn_evalue_threshold",
+        type=float,
+        default=1e-50,
+        help="tblastn evalue threshold.",
+    )
     tblastn_group.add_argument(
         "--tblastn_pident_threshold",
         type=float,
         default=98.0,
-        help="pident threshold for tblastn. use 0.0-100.0. (default: 98.0)",
+        help="pident threshold for tblastn. use 0.0-100.0.",
     )
     tblastn_group.add_argument(
         "--block",
@@ -240,7 +246,7 @@ def main():
         block=args.block,
         tblastn_binary_path=args.tblastn_binary_path,
         parallel_binary_path=args.parallel_binary_path,
-        evalue=args.evalue,
+        evalue=args.tblastn_evalue_threshold,
     )
     duration = time.perf_counter() - start
     print(f"{duration} seconds.")
