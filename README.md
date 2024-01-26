@@ -14,7 +14,7 @@
 これらのバイナリは[Homebrew](https://brew.sh/)を使ってインストールできます。Homebrewをインストールした後、ターミナルで以下のコマンドを実行してください。
 
 ```bash
-brew install python@3.12 blast parallel brewsci/bio/foldseek
+brew install python@3.11 blast parallel brewsci/bio/foldseek
 ```
 
 ### データベース
@@ -29,9 +29,9 @@ makeblastdb -in Pseudomonas_plasmids_847.fasta -dbtype nucl -out P847DB -parse_s
 
 ```bash
 # install from GitHub
-python3.12 -m pip install git+https://github.com/YoshitakaMo/plaseek.git
+python3.11 -m pip install git+https://github.com/YoshitakaMo/plaseek.git
 # upgrade
-python3.12 -m pip uninstall plaseek -y && python3.12 -m pip install --upgrade git+https://github.com/YoshitakaMo/plaseek.git
+python3.11 -m pip uninstall plaseek -y && python3.11 -m pip install --upgrade git+https://github.com/YoshitakaMo/plaseek.git
 ```
 
 ## plaseekの使い方
@@ -48,16 +48,27 @@ plaseek -h
 # set your target sequence database path to --target-sequence-db-path
 # e.g. --target-sequence-db-path /Users/moriwaki/Desktop/db/P847DB
 plaseek -i AF-P07676-F1-model_v4.pdb \
-        --foldseek-db-path /scr/foldseek \
-        --target-sequence-db-path /path/to/db/P847DB \
+        -f /scr/foldseek \
+        -t /path/to/db/P847DB \
         -o results.txt
 
 # run plaseek for m8 file obtained from Foldseek web server
 # set your target sequence database path to --target-sequence-db-path
 # e.g. --target-sequence-db-path /Users/moriwaki/Desktop/db/P847DB
 plaseek -i alis_afdb50.m8 \
-        --target-sequence-db-path /path/to/db/P847DB \
+        -t /path/to/db/P847DB \
         -o results.txt
+```
+
+`--foldseek_evalue_threshold`と`--tblastn_pident_threshold`の値を調節することで検索結果の精度を変更することができます。`--foldseek_evalue_threshold`の値を大きくすると、より広い範囲の類縁構造を検索することができますが、検索結果の精度は下がります。`--tblastn_pident_threshold`の値を小さくすると、target sequence DBの中からその一致度以下のアミノ酸配列を持つ配列を取得することができますが、精度が低下します。
+
+```bash
+# Foldseek e-value threshold: 1e-10 (default: 1e-20), tblastn pident threshold: 90.0% (default: 98.0%)
+plaseek -i alis_afdb50.m8 \
+        -t /path/to/db/P847DB \
+        -o results.txt \
+        --foldseek_evalue_threshold 1e-10 \
+        --tblastn_pident_threshold 90.0
 ```
 
 ## Foldseek Search Serverで類縁構造のリストを作成する
