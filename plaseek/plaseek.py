@@ -143,24 +143,35 @@ def main():
         help="Path to the input file. pdb or foldseek tsv file are acceptable.",
     )
     parser.add_argument(
+        "-o",
+        "--outfile-path",
+        type=str,
+        default=None,
+        help="Path to the output file.",
+    )
+    parser.add_argument(
+        "-f",
         "--foldseek-db-path",
         type=str,
         default=os.getenv("FOLDSEEKDB"),
         help="Path to foldseek database.",
     )
     parser.add_argument(
+        "-t",
+        "--target-sequence-db-path",
+        type=str,
+        default=None,
+        help="Path to the target sequence database file for tblastn.",
+    )
+
+    parser.add_argument(
         "-v",
         "--version",
         action="version",
         version="%(prog)s 0.0.1",
     )
-    parser.add_argument(
-        "--tblastn_pident_threshold",
-        type=float,
-        default=98.0,
-        help="pident threshold for tblastn. use 0.0-100.0. (default: 98.0)",
-    )
-    parser.add_argument(
+    foldseek_group = parser.add_argument_group("Foldseek arguments", "")
+    foldseek_group.add_argument(
         "--foldseek_evalue_threshold",
         type=float,
         default=1e-20,
@@ -168,16 +179,10 @@ def main():
     )
     tblastn_group = parser.add_argument_group("tblastn arguments", "")
     tblastn_group.add_argument(
-        "--target-sequence-db-path",
-        type=str,
-        default=None,
-        help="Path to the target sequence database file for tblastn.",
-    )
-    tblastn_group.add_argument(
-        "--evalue",
+        "--tblastn_pident_threshold",
         type=float,
-        default=1e-100,
-        help="E-value threshold for tblastn.",
+        default=98.0,
+        help="pident threshold for tblastn. use 0.0-100.0. (default: 98.0)",
     )
     tblastn_group.add_argument(
         "--block",
@@ -185,19 +190,12 @@ def main():
         default=3000,
         help="Block size for tblastn.",
     )
-    parser.add_argument(
+    tblastn_group.add_argument(
         "-j",
         "--jobs",
         type=int,
         default=4,
         help="Number of parallel jobs.",
-    )
-    parser.add_argument(
-        "-o",
-        "--outfile-path",
-        type=str,
-        default=None,
-        help="Path to the output file.",
     )
 
     args = parser.parse_args()
