@@ -154,6 +154,18 @@ def main():
         action="version",
         version="%(prog)s 0.0.1",
     )
+    parser.add_argument(
+        "--tblastn_pident_threshold",
+        type=float,
+        default=98.0,
+        help="pident threshold for tblastn. use 0.0-100.0. (default: 98.0)",
+    )
+    parser.add_argument(
+        "--foldseek_evalue_threshold",
+        type=float,
+        default=1e-20,
+        help="evalue threshold for Foldseek. (default: 1e-20)",
+    )
     tblastn_group = parser.add_argument_group("tblastn arguments", "")
     tblastn_group.add_argument(
         "--target-sequence-db-path",
@@ -213,7 +225,9 @@ def main():
     else:
         raise ValueError("Invalid input file suffix: the suffix must be .pdb or .m8.")
 
-    filtered_foldseekhits: pd.DataFrame = filtering_m8file(foldseek_m8file)
+    filtered_foldseekhits: pd.DataFrame = filtering_m8file(
+        foldseek_m8file, eval_threshold=args.foldseek_evalue_threshold
+    )
 
     nodup_fasta = f"{input.stem}_nodup.fasta"
     with open(nodup_fasta, "w") as fh:
@@ -233,7 +247,9 @@ def main():
     duration = time.perf_counter() - start
     print(f"{duration} seconds.")
 
-    filtered_tblastn = filtering_by_pident(tblastn_result, pident_threshold=98.0)
+    filtered_tblastn = filtering_by_pident(
+        tblastn_result, pident_threshold=args.tblastn_pident_threshold
+    )
 
     plaseek.tools.blastdbcmd.run_blastdbcmd(
         blastdbcmd_binary_path=args.blastdbcmd_binary_path,
