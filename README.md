@@ -31,7 +31,7 @@ makeblastdb -in Pseudomonas_plasmids_847.fasta -dbtype nucl -out P847DB -parse_s
 # install from GitHub
 python3.12 -m pip install git+https://github.com/YoshitakaMo/plaseek.git
 # upgrade
-python3.12 -m pip install --upgrade git+https://github.com/YoshitakaMo/plaseek.git
+python3.12 -m pip uninstall plaseek -y && python3.12 -m pip install --upgrade git+https://github.com/YoshitakaMo/plaseek.git
 ```
 
 ## plaseekの使い方
@@ -45,13 +45,17 @@ PDBファイルを指定した場合、Foldseekを使って類縁構造を検索
 plaseek -h
 
 # run plaseek for (predicted) pdb file
+# set your target sequence database path to --target-sequence-db-path
+# e.g. --target-sequence-db-path /Users/moriwaki/Desktop/db/P847DB
 plaseek -i AF-P07676-F1-model_v4.pdb \
         --foldseek-db-path /scr/foldseek \
         --target-sequence-db-path /path/to/db/P847DB \
         -o results.txt
 
 # run plaseek for m8 file obtained from Foldseek web server
-plaseek -i AF-P07676-F1-model_v4.m8 \
+# set your target sequence database path to --target-sequence-db-path
+# e.g. --target-sequence-db-path /Users/moriwaki/Desktop/db/P847DB
+plaseek -i alis_afdb50.m8 \
         --target-sequence-db-path /path/to/db/P847DB \
         -o results.txt
 ```
@@ -90,4 +94,3 @@ Hit tablesからM8ファイル（が圧縮されたtar.gzファイル）をダ�
 ファイルを解凍すると、plaseekに用いることのできるM8ファイルの構成が得られます。複数のデータベースを指定した場合はその数だけのm8ファイルが得られます。
 
 ![m8files](https://i.imgur.com/hgVDmu6.png)
-
