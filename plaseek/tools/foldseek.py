@@ -20,7 +20,7 @@ stream_handler.setFormatter(handler_format)
 logger.addHandler(stream_handler)
 
 
-def run_foldseek(
+def run_foldseek_locally(
     pdbfile: Union[str, Path],
     foldseek_binary_path: Union[str, Path],
     foldseek_db_path: str,
