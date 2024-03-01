@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # %%
 from pathlib import Path
-from absl import logging
+from logging import StreamHandler, Formatter
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import os
 import pandas as pd
@@ -11,11 +11,20 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from typing import Union
+import logging
 import plaseek.tools.foldseek
 import plaseek.tools.blastdbcmd
 import plaseek.tools.tblastn
 
-logging.set_verbosity(logging.INFO)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+stream_handler = StreamHandler()
+stream_handler.setLevel(logging.DEBUG)
+handler_format = Formatter(
+    "%(asctime)s %(filename)s:%(lineno)d - %(levelname)s - %(message)s"
+)
+stream_handler.setFormatter(handler_format)
+logger.addHandler(stream_handler)
 
 
 def check_binaries_available(
@@ -217,7 +226,7 @@ def main():
                 "Please set PATH to Foldseek database by --foldseek-db-path."
             )
         foldseek_m8file = Path(f"{input.stem}.m8")
-        plaseek.tools.foldseek.run_foldseek(
+        plaseek.tools.foldseek.run_foldseek_locally(
             pdbfile=input,
             foldseek_binary_path=args.foldseek_binary_path,
             foldseek_db_path=args.foldseek_db_path,
