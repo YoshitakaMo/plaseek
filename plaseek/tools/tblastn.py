@@ -6,9 +6,9 @@ from typing import Optional
 
 
 def run_tblastn(
-    input_fasta: str,
+    input_fasta: str | Path,
     db: str,
-    outfile: str,
+    outfile: str | Path,
     block: int = 3000,
     tblastn_binary_path: Optional[str] = shutil.which("tblastn"),
     parallel_binary_path: Optional[str] = shutil.which("parallel"),
@@ -36,6 +36,9 @@ def run_tblastn(
         raise FileNotFoundError(f"{parallel_binary_path} not found.")
     if not Path(f"{db}.ndb").exists():
         raise FileNotFoundError(f"{db}.ndb not found.")
+
+    input_fasta = str(input_fasta)
+    db = str(db)
     cmd = (
         f"cat {input_fasta} | {parallel_binary_path} --block {block} --recstart '>' --pipe {tblastn_binary_path} "
         f"-evalue {evalue} -db {db} -max_target_seqs {max_target_seqs} -outfmt \\'{outfmt}\\' -query -"

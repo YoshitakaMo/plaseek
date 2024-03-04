@@ -1,30 +1,22 @@
 #!/usr/bin/env python3
-# %%
+
 from pathlib import Path
-from logging import StreamHandler, Formatter
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import os
 import pandas as pd
 import shutil
 import time
+import logging
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from typing import Union
-import logging
 import plaseek.tools.foldseek
 import plaseek.tools.blastdbcmd
 import plaseek.tools.tblastn
+from plaseek.tools.utils import setup_logging
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-stream_handler = StreamHandler()
-stream_handler.setLevel(logging.DEBUG)
-handler_format = Formatter(
-    "%(asctime)s %(filename)s:%(lineno)d - %(levelname)s - %(message)s"
-)
-stream_handler.setFormatter(handler_format)
-logger.addHandler(stream_handler)
 
 
 def check_binaries_available(
@@ -101,7 +93,7 @@ def remove_duplicates(hits: pd.DataFrame) -> list[SeqRecord]:
 
 
 def filtering_by_pident(
-    infile: str,
+    infile: str | Path,
     pident_threshold: float = 98.0,
     sort_values: str = "saccver",
 ) -> pd.DataFrame:
@@ -144,19 +136,43 @@ def main():
         default=shutil.which("blastdbcmd"),
         help="Path to the blastdbcmd executable.",
     )
+    webserver_group = parser.add_argument_group("Foldseek webserver arguments", "")
+    webserver_group.add_argument(
+        "--alignmode",
+        type=str,
+        choices=["3diaa", "tmalign"],
+        default="3diaa",
+        help="Mode for Foldseek. 3diaa or tmalign.",
+    )
+    webserver_group.add_argument(
+        "--foldseek_web_database",
+        type=list[str],
+        choices=[
+            "pdb100",
+            "afdb50",
+            "afdb-swissprot",
+            "afdb-proteome",
+            "cath50",
+            "mgnify_esm30",
+            "gmgcl_id",
+        ],
+        default=["afdb50", "mgnify_esm30"],
+        help="Sequence database for Foldseek webserver.",
+    )
     parser.add_argument(
         "-i",
         "--input",
         type=str,
         default=None,
+        required=True,
         help="Path to the input file. pdb or foldseek tsv file are acceptable.",
     )
     parser.add_argument(
         "-o",
-        "--outfile-path",
+        "--output-directory",
         type=str,
         default=None,
-        help="Path to the output file.",
+        help="Path to the output directory.",
     )
     parser.add_argument(
         "-f",
@@ -170,6 +186,7 @@ def main():
         "--target-sequence-db-path",
         type=str,
         default=None,
+        required=True,
         help="Path to the target sequence database file for tblastn.",
     )
 
@@ -177,7 +194,7 @@ def main():
         "-v",
         "--version",
         action="version",
-        version="%(prog)s 0.0.1",
+        version="%(prog)s 0.0.2",
     )
     foldseek_group = parser.add_argument_group("Foldseek arguments", "")
     foldseek_group.add_argument(
@@ -214,25 +231,48 @@ def main():
     )
 
     args = parser.parse_args()
-
     check_binaries_available(args.parallel_binary_path, args.tblastn_binary_path)
 
     input = Path(args.input)
+
+    output_directory = args.output_directory
+    if output_directory is None:
+        output_directory = Path(os.getcwd()).joinpath(f"{input.stem}")
+    os.makedirs(output_directory, exist_ok=True)
+    setup_logging(Path(output_directory).joinpath("log.txt"))
+
+    foldseek_m8file = output_directory.joinpath(f"{input.stem}.m8")
     if input.suffix == ".pdb":
-        if args.foldseek_binary_path is None:
-            raise ValueError("Please set PATH to Foldseek by --foldseek-binary-path.")
-        if args.foldseek_db_path is None:
-            raise ValueError(
-                "Please set PATH to Foldseek database by --foldseek-db-path."
+        if not Path(foldseek_m8file).exists():
+            if args.foldseek_binary_path is None or args.foldseek_db_path is None:
+                # use Foldseek webserver
+                logger.info(
+                    f"foldseek_binary_path is not provided. Use Foldseek webserver for {input}."
+                )
+                foldseek_m8file = plaseek.tools.foldseek.run_foldseek_webserver(
+                    input, output_directory
+                )
+            elif args.foldseek_binary_path is None:
+                raise ValueError(
+                    "Please set PATH to Foldseek by --foldseek-binary-path."
+                )
+            else:
+                if args.foldseek_db_path is None:
+                    raise ValueError(
+                        "Please set PATH to Foldseek database by --foldseek-db-path."
+                    )
+                foldseek_m8file = Path(f"{input.stem}.m8")
+                plaseek.tools.foldseek.run_foldseek_locally(
+                    pdbfile=input,
+                    foldseek_binary_path=args.foldseek_binary_path,
+                    foldseek_db_path=args.foldseek_db_path,
+                    outtsvfile=foldseek_m8file,
+                    jobs=args.jobs,
+                )
+        else:
+            logger.info(
+                f"{foldseek_m8file} already exists. Skip using Foldseek webserver."
             )
-        foldseek_m8file = Path(f"{input.stem}.m8")
-        plaseek.tools.foldseek.run_foldseek_locally(
-            pdbfile=input,
-            foldseek_binary_path=args.foldseek_binary_path,
-            foldseek_db_path=args.foldseek_db_path,
-            outtsvfile=foldseek_m8file,
-            jobs=args.jobs,
-        )
     elif input.suffix == ".m8":
         foldseek_m8file = input
     else:
@@ -242,11 +282,11 @@ def main():
         foldseek_m8file, eval_threshold=args.foldseek_evalue_threshold
     )
 
-    nodup_fasta = f"{input.stem}_nodup.fasta"
+    nodup_fasta = Path(output_directory.joinpath(f"{input.stem}_nodup.fasta"))
     with open(nodup_fasta, "w") as fh:
         SeqIO.write(remove_duplicates(filtered_foldseekhits), fh, "fasta")
 
-    tblastn_result = f"{input.stem}_tblastn.tsv"
+    tblastn_result = Path(output_directory.joinpath(f"{input.stem}_tblastn.tsv"))
     start = time.perf_counter()
     plaseek.tools.tblastn.run_tblastn(
         db=args.target_sequence_db_path,
@@ -258,20 +298,23 @@ def main():
         evalue=args.tblastn_evalue_threshold,
     )
     duration = time.perf_counter() - start
-    print(f"{duration} seconds.")
+    logger.info(f"tblastn took {duration:.2f} seconds for {input.stem}")
 
     filtered_tblastn = filtering_by_pident(
         tblastn_result, pident_threshold=args.tblastn_pident_threshold
     )
 
+    start = time.perf_counter()
     plaseek.tools.blastdbcmd.run_blastdbcmd(
         blastdbcmd_binary_path=args.blastdbcmd_binary_path,
         parallel_binary_path=args.parallel_binary_path,
-        outfile=args.outfile_path,
+        outfile=Path(output_directory.joinpath(f"{input.stem}_result.csv")),
         db=args.target_sequence_db_path,
         df=filtered_tblastn,
         jobs=args.jobs,
     )
+    duration = time.perf_counter() - start
+    logger.info(f"blastdbcmd took {duration:.2f} seconds for {input.stem}")
 
 
 if __name__ == "__main__":

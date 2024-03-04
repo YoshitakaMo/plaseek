@@ -1,10 +1,13 @@
-from absl import logging
+import logging
 import os
 import pandas as pd
 import subprocess
 import shutil
 import tempfile
 from typing import Optional
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def swap_sstart_and_send(df: pd.DataFrame) -> pd.DataFrame:
@@ -25,7 +28,7 @@ def swap_sstart_and_send(df: pd.DataFrame) -> pd.DataFrame:
 def run_blastdbcmd(
     db: str,
     df: pd.DataFrame,
-    outfile: str,
+    outfile: str | Path,
     blastdbcmd_binary_path: Optional[str] = shutil.which("blastdbcmd"),
     parallel_binary_path: Optional[str] = shutil.which("parallel"),
     jobs: int | None = os.cpu_count(),
