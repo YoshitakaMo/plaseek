@@ -238,6 +238,8 @@ def main():
     output_directory = args.output_directory
     if output_directory is None:
         output_directory = Path(os.getcwd()).joinpath(f"{input.stem}")
+    else:
+        output_directory = Path(output_directory)
     os.makedirs(output_directory, exist_ok=True)
     setup_logging(Path(output_directory).joinpath("log.txt"))
 
