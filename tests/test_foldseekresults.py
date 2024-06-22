@@ -2,7 +2,10 @@ import pytest
 import os
 
 # import shutil
-from plaseek.tools.foldseek import retrieve_foldseek_results, write_merged_m8file
+from plaseek.tools.foldseek import (
+    retrieve_foldseek_results,
+    write_merged_m8file,
+)
 
 
 @pytest.fixture(scope="function")

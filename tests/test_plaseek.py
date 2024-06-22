@@ -2,7 +2,7 @@ import pytest
 import tempfile
 
 # import shutil
-from plaseek.plaseek import filtering_m8file, filtering_by_pident
+from plaseek.plaseek import filtering_m8file, filtering_by_pident, filtering_m8file
 
 
 @pytest.fixture
@@ -27,6 +27,6 @@ def test_filtering_by_pident():
     output = tempfile.NamedTemporaryFile(suffix=".txt", delete=False).name
     filtering_by_pident(
         tsvfile,
-        pident_threshold=98.0,
+        minpident_threshold=98.0,
     )
     assert open(output).read() == open("tests/inputfiles/test_output.txt").read()

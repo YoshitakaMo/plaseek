@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+# %%
 from pathlib import Path
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import os
@@ -94,7 +94,8 @@ def remove_duplicates(hits: pd.DataFrame) -> list[SeqRecord]:
 
 def filtering_by_pident(
     infile: str | Path,
-    pident_threshold: float = 98.0,
+    minpident_threshold: float = 98.0,
+    maxpident_threshold: float = 100.0,
     sort_values: str = "saccver",
 ) -> pd.DataFrame:
     """Collect plasmid accession ID from tblastn output file.
@@ -102,7 +103,7 @@ def filtering_by_pident(
     """
     df = pd.read_csv(infile, sep="\t", header=0)
 
-    df_filtered = df[df["pident"] >= pident_threshold]
+    df_filtered = df[minpident_threshold <= df["pident"] <= maxpident_threshold]
     # sort by sort_values (default: saccver)
     df_filtered_sorted = df_filtered.sort_values(by=[f"{sort_values}"])
     return df_filtered_sorted
@@ -211,10 +212,16 @@ def main():
         help="tblastn evalue threshold.",
     )
     tblastn_group.add_argument(
-        "--tblastn_pident_threshold",
+        "--tblastn_minpident_threshold",
         type=float,
-        default=98.0,
-        help="pident threshold for tblastn. use 0.0-100.0.",
+        default=50.0,
+        help="min pident threshold for tblastn. use 0.0-100.0.",
+    )
+    tblastn_group.add_argument(
+        "--tblastn_maxpident_threshold",
+        type=float,
+        default=100.0,
+        help="max pident threshold for tblastn. use 0.0-100.0.",
     )
     tblastn_group.add_argument(
         "--block",
@@ -303,9 +310,11 @@ def main():
     logger.info(f"tblastn took {duration:.2f} seconds for {input.stem}")
 
     filtered_tblastn = filtering_by_pident(
-        tblastn_result, pident_threshold=args.tblastn_pident_threshold
+        tblastn_result,
+        minpident_threshold=args.tblastn_minpident_threshold,
+        maxpident_threshold=args.tblastn_maxpident_threshold,
     )
-
+    # TODO: if no hits, skip blastdbcmd
     start = time.perf_counter()
     plaseek.tools.blastdbcmd.run_blastdbcmd(
         blastdbcmd_binary_path=args.blastdbcmd_binary_path,
