@@ -15,6 +15,7 @@ import plaseek.tools.foldseek
 import plaseek.tools.blastdbcmd
 import plaseek.tools.tblastn
 from plaseek.tools.utils import setup_logging
+import plaseek.tools.utils
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,9 @@ def filtering_by_pident(
     """
     df = pd.read_csv(infile, sep="\t", header=0)
 
-    df_filtered = df[minpident_threshold <= df["pident"] <= maxpident_threshold]
+    df_filtered = df[
+        (df["pident"] >= minpident_threshold) & (df["pident"] <= maxpident_threshold)
+    ]
     # sort by sort_values (default: saccver)
     df_filtered_sorted = df_filtered.sort_values(by=[f"{sort_values}"])
     return df_filtered_sorted
@@ -195,7 +198,7 @@ def main():
         "-v",
         "--version",
         action="version",
-        version="%(prog)s 0.0.2",
+        version="%(prog)s 0.0.3",
     )
     foldseek_group = parser.add_argument_group("Foldseek arguments", "")
     foldseek_group.add_argument(
@@ -315,17 +318,27 @@ def main():
         maxpident_threshold=args.tblastn_maxpident_threshold,
     )
     # TODO: if no hits, skip blastdbcmd
-    start = time.perf_counter()
-    plaseek.tools.blastdbcmd.run_blastdbcmd(
-        blastdbcmd_binary_path=args.blastdbcmd_binary_path,
-        parallel_binary_path=args.parallel_binary_path,
-        outfile=Path(output_directory.joinpath(f"{input.stem}_result.csv")),
-        db=args.target_sequence_db_path,
-        df=filtered_tblastn,
-        jobs=args.jobs,
-    )
-    duration = time.perf_counter() - start
-    logger.info(f"blastdbcmd took {duration:.2f} seconds for {input.stem}")
+    if filtered_tblastn.empty:
+        logger.info(f"No hits found for {input.stem}. Skip blastdbcmd. No results.")
+    else:
+        logger.info(f"Found {len(filtered_tblastn)} hits for {input.stem}.")
+        start = time.perf_counter()
+        plaseek.tools.blastdbcmd.run_blastdbcmd(
+            blastdbcmd_binary_path=args.blastdbcmd_binary_path,
+            parallel_binary_path=args.parallel_binary_path,
+            outfile=Path(output_directory.joinpath(f"{input.stem}_result.fasta")),
+            db=args.target_sequence_db_path,
+            df=filtered_tblastn,
+            jobs=args.jobs,
+        )
+        duration = time.perf_counter() - start
+        logger.info(f"blastdbcmd took {duration:.2f} seconds for {input.stem}")
+
+        plaseek.tools.utils.write_resultfile(
+            blastcmdresult=output_directory.joinpath(f"{input.stem}_result.fasta"),
+            tblastnresult=tblastn_result,
+            outputfile=output_directory.joinpath(f"{input.stem}_output.tsv"),
+        )
 
 
 if __name__ == "__main__":

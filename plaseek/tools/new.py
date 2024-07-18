@@ -1,48 +1,26 @@
-import logging
-from logging import StreamHandler, Formatter
+# %%
 from pathlib import Path
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+import os
 import pandas as pd
+import shutil
+import time
+import logging
 from Bio import SeqIO
 from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 from dataclasses import dataclass  # Python 3.7+
+from typing import Union
+import plaseek.tools.foldseek
+import plaseek.tools.blastdbcmd
+import plaseek.tools.tblastn
+from plaseek.tools.utils import setup_logging
+
+resultblastcmd = "/Users/YoshitakaM/Desktop/AF-A0A166M635-F1-model_v4/AF-A0A166M635-F1-model_v4_result.fasta"
+tblastnresult = "/Users/YoshitakaM/Desktop/AF-A0A166M635-F1-model_v4/AF-A0A166M635-F1-model_v4_tblastn.tsv"
 
 
-def setup_logging(log_file: Path, mode: str = "w") -> None:
-    log_file.parent.mkdir(exist_ok=True, parents=True)
-    logger = logging.getLogger(__name__)
-    if logger.handlers:
-        for handler in logger.handlers:
-            handler.close()
-            logger.removeHandler(handler)
-    logger.setLevel(logging.INFO)
-    stream_handler = StreamHandler()
-    stream_handler.setLevel(logging.DEBUG)
-    handler_format = Formatter(
-        "%(asctime)s %(filename)s:%(lineno)d - %(levelname)s - %(message)s"
-    )
-    stream_handler.setFormatter(handler_format)
-    logger.addHandler(stream_handler)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(filename)s:%(lineno)d - %(levelname)s - %(message)s",
-        handlers=[stream_handler, logging.FileHandler(log_file, mode=mode)],
-    )
-
-
-def write_resultfile(
-    blastcmdresult: str | Path, tblastnresult: str | Path, outputfile: str | Path
-):
-    """
-    Write the result file.
-    ----
-    blastcmdresult: str | Path
-        Path to the result file of blastcmd.
-    tblastnresult: str | Path
-        Path to the result file of tblastn.
-    outputfile: str | Path
-        Path to the output file.
-    """
-
+def write_resultfile(blastcmdhits, tblastnhits, outputfile):
     @dataclass
     class BlastcmdHit:
         genbank_id: str
@@ -58,7 +36,7 @@ def write_resultfile(
         sseq: str
 
     blastcmdhits = []
-    with open(blastcmdresult, "r") as f:
+    with open(resultblastcmd, "r") as f:
         records = list(SeqIO.parse(f, "fasta"))
         for record in records:
             # record.idを:と-で分離してそれぞれを取得
@@ -100,3 +78,7 @@ def write_resultfile(
                         f.write(
                             f"{blastcmdhit.genbank_id}\t{tblastnhit.sstart}\t{tblastnhit.send}\t{blastcmdhit.dnaseq}\t{translated_seq}\n"
                         )
+
+
+write_resultfile(resultblastcmd, tblastnresult, "/Users/YoshitakaM/Desktop/result.tsv")
+# %%

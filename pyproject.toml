@@ -1,6 +1,6 @@
 [project]
 name = "plaseek"
-version = "0.0.2"
+version = "0.0.3"
 description = "Search for plamid replication proteins based on protein structures"
 authors = [{ name = "Y.Moriwaki", email = "virgospica93@gmail.com" }]
 readme = "README.md"

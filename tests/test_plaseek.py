@@ -2,7 +2,7 @@ import pytest
 import tempfile
 
 # import shutil
-from plaseek.plaseek import filtering_m8file, filtering_by_pident, filtering_m8file
+from plaseek.plaseek import filtering_m8file, filtering_by_pident
 
 
 @pytest.fixture
