@@ -67,7 +67,7 @@ plaseek -i alis_afdb50.m8 \
         -o result2
 ```
 
-`--foldseek_evalue_threshold`と`--tblastn_pident_threshold`の値を調節することで検索結果の精度を変更することができます。`--foldseek_evalue_threshold`の値を大きくすると、より広い範囲の類縁構造を検索することができますが、検索結果の精度は下がります。`--tblastn_pident_threshold`の値を小さくすると、target sequence DBの中からその一致度以下のアミノ酸配列を持つ配列を取得することができますが、精度が低下します。
+`--foldseek_evalue_threshold`と`--tblastn_minpident_threshold`の値を調節することで検索結果の精度を変更することができます。`--foldseek_evalue_threshold`の値を大きくすると、より広い範囲の類縁構造を検索することができますが、検索結果の精度は下がります。`--tblastn_minpident_threshold`の値を小さくすると、target sequence DBの中からその一致度以下のアミノ酸配列を持つ配列を取得することができますが、精度が低下します。`--tblastn_maxpident_threshold`の値を小さくすると、その値より配列相同性の高いものを非表示にできます。
 
 ```bash
 # Foldseek e-value threshold: 1e-10 (default: 1e-20), tblastn pident threshold: 90.0% (default: 98.0%)
@@ -75,7 +75,8 @@ plaseek -i alis_afdb50.m8 \
         -t /path/to/db/P847DB \
         -o result3 \
         --foldseek_evalue_threshold 1e-10 \
-        --tblastn_pident_threshold 90.0
+        --tblastn_minpident_threshold 90.0 \
+        --tblastn_maxpident_threshold 99.0
 ```
 
 ## Foldseek Search Serverで類縁構造のリストを作成する
