@@ -239,7 +239,7 @@ def main():
     tblastn_group.add_argument(
         "--tblastn_minpident_threshold",
         type=float,
-        default=50.0,
+        default=0.0,
         help="min pident threshold for tblastn. use 0.0-100.0.",
     )
     tblastn_group.add_argument(
