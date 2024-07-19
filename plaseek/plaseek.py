@@ -31,10 +31,14 @@ def check_binaries_available(
 
 
 def filtering_m8file(
-    file: Union[str, Path], eval_threshold: float = 1e-10
+    file: Union[str, Path],
+    eval_threshold: float = 1e-10,
+    minpident_threshold: float = 0.0,
+    maxpident_threshold: float = 50.0,
 ) -> pd.DataFrame:
     """Filtering Foldseek result file in M8 format.
     filter by e-value < 1e-10
+    Also, filtered by pident.
     The header is "query,theader,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,prob,evalue,bits,qlen,tlen,qaln,taln,tca,tseq,taxid,taxname".
     """
     m8file = Path(file)
@@ -65,7 +69,13 @@ def filtering_m8file(
             "taxname",
         ],
     )
-    df_filtered = df[df["evalue"] < eval_threshold]
+    df["pident"] = pd.to_numeric(df["pident"], errors="coerce")
+    df["evalue"] = pd.to_numeric(df["evalue"], errors="coerce")
+    df_filtered = df[
+        (df["evalue"] < eval_threshold)
+        & (df["pident"] >= minpident_threshold)
+        & (df["pident"] <= maxpident_threshold)
+    ]
     return df_filtered
 
 
@@ -198,14 +208,26 @@ def main():
         "-v",
         "--version",
         action="version",
-        version="%(prog)s 0.0.3",
+        version="%(prog)s 0.0.4",
     )
     foldseek_group = parser.add_argument_group("Foldseek arguments", "")
     foldseek_group.add_argument(
         "--foldseek_evalue_threshold",
         type=float,
-        default=1e-20,
+        default=10000,
         help="evalue threshold for Foldseek.",
+    )
+    foldseek_group.add_argument(
+        "--foldseek_minpident_threshold",
+        type=float,
+        default=0.0,
+        help="minimum pident threshold for Foldseek.",
+    )
+    foldseek_group.add_argument(
+        "--foldseek_maxpident_threshold",
+        type=float,
+        default=100.0,
+        help="maximum pident threshold for Foldseek.",
     )
     tblastn_group = parser.add_argument_group("tblastn arguments", "")
     tblastn_group.add_argument(
@@ -291,7 +313,10 @@ def main():
         raise ValueError("Invalid input file suffix: the suffix must be .pdb or .m8.")
 
     filtered_foldseekhits: pd.DataFrame = filtering_m8file(
-        foldseek_m8file, eval_threshold=args.foldseek_evalue_threshold
+        foldseek_m8file,
+        eval_threshold=args.foldseek_evalue_threshold,
+        minpident_threshold=args.foldseek_minpident_threshold,
+        maxpident_threshold=args.foldseek_maxpident_threshold,
     )
 
     nodup_fasta = Path(output_directory.joinpath(f"{input.stem}_nodup.fasta"))
@@ -317,7 +342,6 @@ def main():
         minpident_threshold=args.tblastn_minpident_threshold,
         maxpident_threshold=args.tblastn_maxpident_threshold,
     )
-    # TODO: if no hits, skip blastdbcmd
     if filtered_tblastn.empty:
         logger.info(f"No hits found for {input.stem}. Skip blastdbcmd. No results.")
     else:

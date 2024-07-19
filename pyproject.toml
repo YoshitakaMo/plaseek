@@ -1,6 +1,6 @@
 [project]
 name = "plaseek"
-version = "0.0.3"
+version = "0.0.4"
 description = "Search for plamid replication proteins based on protein structures"
 authors = [{ name = "Y.Moriwaki", email = "virgospica93@gmail.com" }]
 readme = "README.md"
@@ -16,7 +16,13 @@ classifiers = [
     'Operating System :: MacOS',
 ]
 requires-python = ">=3.9"
-dependencies = ["absl-py", "biopython", "pandas", "requests"]
+dependencies = [
+    "absl-py",
+    "biopython",
+    "pandas >= 2.2",
+    "requests",
+    "pygments >= 2.18.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -42,3 +48,9 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["plaseek"]
+
+[tool.pytest.ini_options]
+rootdir = "."
+minversion = "6.0"
+addopts = "-ra -q -p no:warnings -v --color=yes"
+testpaths = ["tests"]
